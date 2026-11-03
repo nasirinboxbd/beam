@@ -6,7 +6,29 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>BeamLab – Beam Analysis for Students</title>
+    <title>BeamLab – Interactive Beam Analysis, SFD, BMD &amp; Influence Lines</title>
+    <meta name="description" content="BeamLab is an interactive structural analysis tool for students and engineers. Analyse determinate and indeterminate beams, support reactions, shear force, bending moment, deflection and influence lines with step-by-step solutions." />
+    <meta name="keywords" content="Beam analysis, structural analysis, beam calculator, support reactions, shear force diagram, bending moment diagram, deflection, influence line diagram, Euler-Bernoulli beam, FEM" />
+    <meta name="author" content="BeamLab" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="BeamLab" />
+    <meta property="og:title" content="BeamLab – Interactive Beam Analysis" />
+    <meta property="og:description" content="Analyse beams, view SFD and BMD, calculate deflection and explore influence lines with interactive diagrams and step-by-step solutions." />
+    <meta property="og:locale" content="en_US" />
+    <!-- Replace the URL below with the final public URL after publishing. -->
+    <meta property="og:url" content="https://YOUR-DOMAIN/beam-index.html" />
+    <!-- Set this to an absolute, publicly accessible 1200×630 preview image URL. -->
+    <meta property="og:image" content="https://YOUR-DOMAIN/beam-preview.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="BeamLab interactive beam analysis and structural engineering diagrams" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="BeamLab – Interactive Beam Analysis" />
+    <meta name="twitter:description" content="Beam analysis, support reactions, SFD, BMD, deflection and influence lines with step-by-step solutions." />
+    <meta name="twitter:image" content="https://YOUR-DOMAIN/beam-preview.png" />
+    <link rel="canonical" href="https://YOUR-DOMAIN/beam-index.html" />
     <style>
       :root {
         --bg: #f4f6f9;
@@ -528,6 +550,9 @@
                 type="number"
                 step="any"
             /></label>
+          </div>
+          <div class="bar nop" style="margin-top:10px">
+            <button id="bILTut" class="p" style="background:#c026d3;border-color:#c026d3">📘 Step-by-step solution preview</button>
           </div>
           <p style="font-size: 12px; color: var(--mu); margin: 8px 0 0">
             Each ordinate is the value of the chosen quantity when a unit load
@@ -2665,6 +2690,93 @@ Note: stress check is indicative (elastic bending only, no shear, buckling or co
         ilUI();
         anim();
       }
+      function influenceTutor() {
+        const key = $("ipre").value;
+        const p = IP[key];
+        if (!p) return;
+        const qNames = {
+          R: "support reaction",
+          MR: "fixed-support moment reaction",
+          V: "shear force at a section",
+          VL: "shear immediately to the left of a section",
+          VR: "shear immediately to the right of a section",
+          M: "bending moment at a section"
+        };
+        const qName = qNames[IL.q] || "selected response";
+        const section = cvv(IL.a, "L");
+        const supports = im.sup.map((s, i) =>
+          `<tr><td>${i + 1}</td><td>${esc(s.t)}</td><td>${nd(cvv(s.x,"L"),3)} ${uk("L")}</td></tr>`
+        ).join("");
+        const loads = im.lds.map((l, i) => {
+          if (l.t === "udl") return `<tr><td>${i + 1}</td><td>UDL</td><td>${nd(cvv(l.w1,"w"),3)} ${un("w")}</td><td>${nd(cvv(l.x1,"L"),3)}–${nd(cvv(l.x2,"L"),3)} ${uk("L")}</td></tr>`;
+          return `<tr><td>${i + 1}</td><td>Point load</td><td>${nd(cvv(l.w1,"F"),3)} ${un("F")}</td><td>x = ${nd(cvv(l.x1,"L"),3)} ${uk("L")}</td></tr>`;
+        }).join("");
+        const html = `
+          <div class="w">
+            <div class="bar nop" style="justify-content:flex-end">
+              <button id="ilTutPrint" class="p">Print / Save PDF</button>
+              <button id="ilTutClose">✕ Close</button>
+            </div>
+            <h1>Step-by-step solution — ${esc(p[0])}</h1>
+            <p class="muted">Influence-line analysis · ${nd(cvv(im.L,"L"),3)} ${uk("L")} span · Selected response: <b>${qName}</b></p>
+            <div class="st" style="--c:#2563eb">
+              <h3><span>1</span>Understand the problem and sign convention</h3>
+              <p>The influence line shows how the selected response changes as a <b>unit downward moving load</b> travels along the beam. At each load position x, the ordinate is the value of the selected response caused by that unit load.</p>
+              <p><b>Selected quantity:</b> ${qName}. <b>Section / reference position:</b> x = ${section} ${uk("L")}. Positive and negative ordinates retain the sign convention used by the analysis diagram.</p>
+              <img src="${$("c6").toDataURL()}" alt="Influence-line beam and selected section">
+            </div>
+            <div class="st" style="--c:#7c3aed">
+              <h3><span>2</span>Identify supports and applied loads</h3>
+              <p>First record the beam restraints and the loads in the selected example. These define the structure whose response is being investigated.</p>
+              <table><tr><th>#</th><th>Support</th><th>Position</th></tr>${supports}</table>
+              <h4>Applied loads shown in the example</h4>
+              <table><tr><th>#</th><th>Load type</th><th>Magnitude</th><th>Position / range</th></tr>${loads || '<tr><td colspan="4">No applied loads</td></tr>'}</table>
+              <div class="tip">The applied loads are displayed for context. The influence-line ordinates themselves are calculated using a separate unit moving load.</div>
+            </div>
+            <div class="st" style="--c:#db2777">
+              <h3><span>3</span>Place a unit load at a trial position</h3>
+              <p>Imagine a unit load of 1 ${un("F")} at a trial coordinate x = a. Recalculate the selected response for that position. Move the unit load to another coordinate and repeat.</p>
+              <div class="eq"><math display="block"><mrow><mi>IL</mi><mo>(</mo><mi>a</mi><mo>)</mo><mo>=</mo><mi>Q</mi><mo>(</mo><mi>a</mi><mo>)</mo><mtext> due to a unit moving load</mtext></mrow></math></div>
+              <p>For a statically determinate beam, use equilibrium equations to obtain the response. For a statically indeterminate beam, the solver uses the stiffness method and displacement compatibility; the influence line is therefore not assumed to be a simple straight-line construction.</p>
+            </div>
+            <div class="st" style="--c:#ea580c">
+              <h3><span>4</span>Calculate the selected response</h3>
+              <p>At each trial position, determine the reactions first when required. Then evaluate the requested response:</p>
+              <ul>
+                <li><b>Reaction:</b> use vertical force and moment equilibrium, or the stiffness solution for an indeterminate system.</li>
+                <li><b>Moment reaction:</b> read the reaction couple at the selected fixed support.</li>
+                <li><b>Shear:</b> sum the vertical forces on the specified side of the section.</li>
+                <li><b>Bending moment:</b> take moments of the forces on one side about the selected section.</li>
+              </ul>
+              <div class="eq"><math display="block"><mrow><mi>V</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mo>Σ</mo><mi>F</mi><msub><mi></mi><mi>y</mi></msub></mrow></math></div>
+              <div class="eq"><math display="block"><mrow><mi>M</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mo>Σ</mo><mi>F</mi><mo>×</mo><mi>lever arm</mi></mrow></math></div>
+              <p>At a support or at the selected section, distinguish the left-hand and right-hand shear ordinates when a jump occurs.</p>
+            </div>
+            <div class="st" style="--c:#16a34a">
+              <h3><span>5</span>Plot the influence line</h3>
+              <p>Repeat the unit-load calculation over the full span. Plot each calculated response against the moving-load coordinate. Positive ordinates appear above the zero axis and negative ordinates below it.</p>
+              <img src="${$("c5").toDataURL()}" alt="Calculated influence line">
+              <p>The plotted curve belongs to the currently selected example and response. Change the example, quantity, support or section to update the analysis.</p>
+            </div>
+            <div class="st" style="--c:#0891b2">
+              <h3><span>6</span>Interpret the result</h3>
+              <ul>
+                <li>The ordinate at a position gives the selected response caused by a unit load at that position.</li>
+                <li>The sign indicates the direction relative to the selected response convention.</li>
+                <li>For a real moving load, multiply the influence-line ordinates by the corresponding load magnitudes and combine their effects.</li>
+                <li>For a distributed moving load, integrate the influence-line ordinate over the loaded length.</li>
+              </ul>
+              <div class="tip">Study tip: move the selected section and compare the change in the influence line. For shear, compare the left and right sides of the section, especially at supports.</div>
+            </div>
+          </div>`;
+        let d = $("tut");
+        if (!d) { d = document.createElement("div"); d.id = "tut"; document.body.append(d); }
+        d.hidden = false;
+        d.innerHTML = html;
+        $("ilTutClose").onclick = () => d.hidden = true;
+        $("ilTutPrint").onclick = () => window.print();
+      }
+      $("bILTut").addEventListener("click", influenceTutor);
       $("sI").addEventListener("input", (e) => {
         const t = e.target,
           d = t.dataset;
