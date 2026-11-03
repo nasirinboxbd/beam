@@ -324,7 +324,7 @@
           <option value="sn">SI: N, m, mm</option>
           <option value="us">US: kip, ft, in</option></select
         ><button id="bTh">◐ Theme</button
-        ><button id="bPdf" class="p">Export PDF</button
+        ><button id="bTut" class="p" style="background:#c026d3;border-color:#c026d3">📘 Step-by-step solution</button><button id="bPdf" class="p">Export PDF</button
         ><button id="bPng">Export PNG</button
         ><button id="bCsv">Export CSV</button><button id="bPr">Print</button>
       </div>
@@ -370,6 +370,18 @@
               >Z (<span id="uZ"></span>)<input id="Z" type="number" step="any"
             /></label>
           </div>
+        </div>
+        <div class="pn">
+          <h2>Variable I along the member</h2>
+          <div id="iseg"></div>
+          <div class="bar"><button id="iAdd">+ Add section with different I</button></div>
+          <label style="margin-top:8px">Dimensions (AutoCAD style)<select id="dm">
+            <option value="chain">Chain (continuous)</option>
+            <option value="overall" selected>Chain + overall</option>
+            <option value="base">Baseline (from left end)</option>
+            <option value="ord">Ordinate (datum at x = 0)</option>
+            <option value="off">Hidden</option></select></label>
+          <p style="font-size:11px;color:var(--mu);margin:6px 0 0">Member depth in the figure is drawn ∝ I<sup>1/3</sup>. Overrides the base I inside each [from, to] range; stiffness EI is varied element by element in the solver.</p>
         </div>
         <div class="pn">
           <h2>Project (saved in this browser)</h2>
@@ -421,7 +433,7 @@
         <div id="cvs">
           <div class="cv">
             <h3>Beam, supports &amp; applied loads</h3>
-            <canvas id="c0" height="170"></canvas>
+            <canvas id="c0" height="250"></canvas>
           </div>
           <div class="cv">
             <h3>Free body diagram — supports replaced by reactions</h3>
@@ -752,6 +764,7 @@
           EI = E * 1e9 * I * 1e-8,
           T = 1e-6,
           key = [0, L];
+        (m.Iseg || []).forEach((g) => key.push(g.x1, g.x2));
         sup.forEach((s) => key.push(s.x));
         lds.forEach((l) => {
           key.push(l.x1);
@@ -790,7 +803,7 @@
             a = dm[e],
             b = dm[e + 1],
             d = [a.v, a.r, b.v, b.l],
-            c = EI / Le ** 3;
+            c = (EI * Iat(m, (xs[e] + xs[e + 1]) / 2, I)) / I / Le ** 3;
           const k = [
             [12, 6 * Le, -12, 6 * Le],
             [6 * Le, 4 * Le * Le, -6 * Le, 2 * Le * Le],
@@ -1090,6 +1103,8 @@
       function load(k) {
         const p = PRE[k];
         st.L = p[1];
+        st.Iseg = (p[4] || []).map((g) => ({ ...g, id: st.id++ }));
+        if (window.isegUI) isegUI();
         st.sup = p[2].map((s) => ({ ...s, id: st.id++ }));
         st.lds = p[3].map((l) => ({ ...l, id: st.id++ }));
         sync();
@@ -1440,10 +1455,8 @@ Note: stress check is indicative (elastic bending only, no shear, buckling or co
           x.lineCap = "round";
           x.strokeStyle = bm;
           x.lineWidth = 7;
-          x.beginPath();
-          x.moveTo(sx(0), y);
-          x.lineTo(sx(st.L), y);
-          x.stroke();
+          beamShape(x, sx, y, bm, mu);
+          if (ci == 0) dimDraw(x, sx, y);
           st.sup.forEach((s) => {
             if (fbd && s.t != "hinge") return;
             const X = sx(s.x);
@@ -2732,5 +2745,109 @@ Note: stress check is indicative (elastic bending only, no shear, buckling or co
       );
       ilPre("ss");
     </script>
+
+<style>
+#tut{position:fixed;inset:0;z-index:50;background:var(--bg);overflow:auto;padding:16px}
+#tut .w{max-width:900px;margin:auto}
+#tut h1{font-size:24px;background:linear-gradient(90deg,#2563eb,#c026d3,#ea580c);-webkit-background-clip:text;background-clip:text;color:transparent}
+#tut .st{border:1px solid var(--bd);border-left:6px solid var(--c);border-radius:12px;background:var(--pn);padding:14px 16px;margin:14px 0}
+#tut .st h3{margin:0 0 8px;color:var(--c);font-size:17px}
+#tut .st h3 span{background:var(--c);color:#fff;border-radius:50%;display:inline-block;width:26px;height:26px;text-align:center;line-height:26px;margin-right:8px;font-size:14px}
+#tut .tip{background:color-mix(in srgb,var(--c) 12%,transparent);border-radius:8px;padding:8px 10px;margin:8px 0}
+#tut math{font-size:1.18em;color:var(--tx)}
+#tut img{max-width:100%;border:1px solid var(--bd);border-radius:8px;margin:6px 0}
+#tut b.r{color:var(--c)}
+</style>
+<script>
+const Iat=(m,x,I)=>{const g=(m.Iseg||[]).find(g=>x>g.x1&&x<g.x2);return g?g.I:I};
+st.Iseg=st.Iseg||[];
+const SS=[S("pinned",0),S("roller",10)];
+Object.assign(PRE,{
+ h1:["Haunched beam (stepped I)",10,SS,[U(0,10,20)],[{x1:0,x2:2.5,I:24000},{x1:7.5,x2:10,I:24000}]],
+ h2:["Cantilever, stiffer root",6,[S("fixed",0)],[P(6,20)],[{x1:0,x2:3,I:20000}]],
+ h3:["Propped cantilever + UDL",8,[S("fixed",0),S("roller",8)],[U(0,8,12)]],
+ h4:["Fixed–fixed + UDL",8,[S("fixed",0),S("fixed",8)],[U(0,8,15)]],
+ h5:["Fixed–fixed, central point",8,[S("fixed",0),S("fixed",8)],[P(4,60)]],
+ h6:["Three-span continuous",18,[S("pinned",0),S("roller",6),S("roller",12),S("roller",18)],[U(0,18,10)]],
+ h7:["Continuous, pattern loading",18,[S("pinned",0),S("roller",6),S("roller",12),S("roller",18)],[U(0,6,15),U(12,18,15)]],
+ h8:["Double overhang",12,[S("pinned",2),S("roller",10)],[P(0,15),P(12,15),U(2,10,8)]],
+ h9:["Two point loads (third points)",9,SS.map(s=>({...s,x:s.x*0.9})),[P(3,30),P(6,30)]],
+ h10:["Couple at midspan",8,[S("pinned",0),S("roller",8)],[{t:"moment",x1:4,w1:50,cw:true}]],
+ h11:["Cantilever, partial UDL",5,[S("fixed",0)],[U(2.5,5,20)]],
+ h12:["Trapezoidal load",10,SS,[{t:"tri",x1:0,x2:10,w1:10,w2:40}]],
+ h13:["Gerber beam, two hinge spans",15,[S("pinned",0),S("roller",6),S("hinge",9),S("roller",12)],[U(0,15,10)]],
+ h14:["Two-span, stiffer middle",12,[S("pinned",0),S("roller",6),S("roller",12)],[U(0,12,12)],[{x1:4,x2:8,I:30000}]],
+ h15:["Propped cantilever + point",10,[S("fixed",0),S("roller",10)],[P(6,40)]],
+ h16:["Backspan with tip load",9,[S("pinned",0),S("roller",6)],[P(9,30),U(0,6,10)]],
+ h17:["Inclined load on overhang",10,[S("pinned",0),S("roller",8)],[{t:"point",x1:10,w1:40,ang:45}]],
+ h18:["Bridge girder, variable I",24,[S("pinned",0),S("roller",24)],[U(0,24,18),P(12,120)],[{x1:0,x2:6,I:20000},{x1:6,x2:18,I:45000},{x1:18,x2:24,I:20000}]],
+ h19:["Cantilever, triangular load",6,[S("fixed",0)],[{t:"tri",x1:0,x2:6,w1:30,w2:0}]],
+ h20:["Four-span continuous",20,[0,5,10,15,20].map((x,i)=>S(i?"roller":"pinned",x)),[U(0,20,8)]]
+});
+fillSel($("pre"),Object.entries(PRE).map(([k,v])=>[k,v[0]]));$("pre").value="ss";
+function beamShape(x,sx,y,col,mu){
+ x.save();x.lineWidth=1.5;
+ const cuts=[...new Set([0,st.L,...st.Iseg.flatMap(q=>[q.x1,q.x2])])].filter(v=>v>=0&&v<=st.L).sort((a,b)=>a-b);
+ if(cuts.length<3){x.lineWidth=7;x.beginPath();x.moveTo(sx(0),y);x.lineTo(sx(st.L),y);x.stroke();x.restore();return}
+ const seg=[];for(let i=0;i<cuts.length-1;i++)seg.push([cuts[i],cuts[i+1],Iat(st,(cuts[i]+cuts[i+1])/2,st.I)]);
+ const mn=Math.min(...seg.map(s=>s[2]));
+ seg.forEach(([a,b,I])=>{const H=Math.min(46,9*Math.cbrt(I/mn)),A=sx(a),B=sx(b);
+  x.fillStyle=col+"66";x.fillRect(A,y-H/2,B-A,H);x.strokeRect(A,y-H/2,B-A,H);
+  if(B-A>48){x.fillStyle=mu;x.font="10px ui-monospace,monospace";x.textAlign="center";x.fillText("I="+nd(I*fac("I"),0),(A+B)/2,y-H/2-4)}});
+ x.restore()}
+function dimDraw(x,sx,y){
+ const m=$("dm").value;if(m=="off")return;
+ const P_=[0,st.L];st.sup.forEach(s=>P_.push(s.x));st.lds.forEach(l=>{P_.push(l.x1);if(l.t=="udl"||l.t=="tri")P_.push(l.x2)});st.Iseg.forEach(g=>P_.push(g.x1,g.x2));
+ const p=[...new Set(P_.map(v=>+v.toFixed(6)).filter(v=>v>=0&&v<=st.L))].sort((a,b)=>a-b),
+  col=cs("--ac"),t=v=>nd(v*fac("L"),2),y0=y+58;
+ x.save();x.strokeStyle=col;x.fillStyle=col;x.lineWidth=1;x.font="11px ui-monospace,monospace";x.textAlign="center";
+ const tick=(X,yy)=>{x.lineWidth=2;x.beginPath();x.moveTo(X-4,yy+4);x.lineTo(X+4,yy-4);x.stroke();x.lineWidth=1};
+ const row=(a,b,yy)=>{const A=sx(a),B=sx(b);x.beginPath();x.moveTo(A,y+40);x.lineTo(A,yy-5);x.moveTo(B,y+40);x.lineTo(B,yy-5);x.moveTo(A-5,yy);x.lineTo(B+5,yy);x.stroke();tick(A,yy);tick(B,yy);
+  if(B-A>34)x.fillText(t(b-a),(A+B)/2,yy-4);else{x.save();x.translate((A+B)/2+3,yy-4);x.rotate(-Math.PI/2);x.textAlign="left";x.fillText(t(b-a),0,0);x.restore()}};
+ if(m=="chain"||m=="overall")for(let i=0;i<p.length-1;i++)row(p[i],p[i+1],y0);
+ if(m=="overall")row(0,st.L,y0+20);
+ if(m=="base")for(let i=1;i<p.length;i++)row(0,p[i],y0+(i-1)*14);
+ if(m=="ord"){x.beginPath();x.moveTo(sx(0),y0);x.lineTo(sx(st.L),y0);x.stroke();
+  p.forEach(v=>{const X=sx(v);x.beginPath();x.moveTo(X,y+40);x.lineTo(X,y0+5);x.stroke();x.save();x.translate(X+3,y0+8);x.rotate(Math.PI/4);x.textAlign="left";x.fillText(t(v),0,0);x.restore()})}
+ x.restore()}
+function isegUI(){
+ $("iseg").innerHTML=st.Iseg.map(g=>`<div class="row" style="grid-template-columns:1fr 1fr 1fr auto">${[["x1","from","L"],["x2","to","L"],["I","I","I"]].map(([k,n,u])=>`<label>${n} (${uk(u)})<input type="number" step="any" data-q="${k}" data-g="${g.id}" value="${cvv(g[k],u)}"></label>`).join("")}<button class="x" data-gd="${g.id}">✕</button></div>`).join("")||'<p style="color:var(--mu);margin:0 0 6px">Uniform I (value set above).</p>'}
+$("iseg").addEventListener("input",e=>{e.stopPropagation();const t=e.target,g=st.Iseg.find(g=>g.id==t.dataset.g);if(!g)return;const k=t.dataset.q,v=parseFloat(t.value);if(isFinite(v)&&v>0||k!="I"&&isFinite(v)){g[k]=v/fac(k=="I"?"I":"L");run()}});
+$("iseg").addEventListener("click",e=>{const d=e.target.dataset.gd;if(d){st.Iseg=st.Iseg.filter(g=>g.id!=d);isegUI();run()}});
+$("iAdd").onclick=()=>{st.Iseg.push({id:st.id++,x1:st.L*0.25,x2:st.L*0.75,I:st.I*2});isegUI();run()};
+$("dm").addEventListener("input",e=>{e.stopPropagation();ap=1;draw()});
+$("us").addEventListener("input",()=>setTimeout(isegUI));
+/* ---------- Step-by-step tutor ---------- */
+const mi=t=>`<mi>${t}</mi>`,mn=t=>`<mn>${t}</mn>`,mo=t=>`<mo>${t}</mo>`,fr=(a,b)=>`<mfrac><mrow>${a}</mrow><mrow>${b}</mrow></mfrac>`,
+ mt=s=>`<math display="block">${s}</math>`,sb=(a,b)=>`<msub>${a}${b}</msub>`,mx=t=>`<mtext>&#160;${t}</mtext>`,
+ sq=(a,b)=>`<msup>${a}${b}</msup>`,F_=v=>nd(v*fac("F"),2),M_=v=>nd(v*fac("M"),2),L_=v=>nd(v*fac("L"),2);
+function tutor(){
+ if(!R){alert("Fix the model error first.");return}
+ const rx=R.rx,loads=[],Fu=un("F"),Mu=un("M"),Lu=uk("L");let h="";
+ st.lds.forEach(l=>{if(l.t=="point"){const th=(l.ang||0)*Math.PI/180,W=l.w1*Math.cos(th)*(l.up?-1:1);loads.push({n:"Point load"+(l.ang?" (vertical component of "+nd(l.w1*fac("F"))+" "+Fu+" at "+l.ang+"°)":l.up?" (upward)":""),W,xb:l.x1,d:"direct"})}
+  else if(l.t=="moment")loads.push({n:"Applied couple ("+(l.cw?"clockwise":"counter-clockwise")+")",W:0,xb:l.x1,mc:(l.cw?1:-1)*l.w1,d:"couple"});
+  else{const dx=l.x2-l.x1,W=(l.w1+l.w2)/2*dx,s=l.w1+l.w2,xb=Math.abs(s)<1e-12?l.x1+dx/2:l.x1+dx*(l.w1+2*l.w2)/(3*s);loads.push({n:(l.t=="udl"?"UDL":"Trapezoidal load")+" "+nd(l.w1*fac("w"))+(l.w2!=l.w1?"→"+nd(l.w2*fac("w")):"")+" "+un("w")+" over "+L_(l.x1)+"–"+L_(l.x2)+" "+Lu,W,xb,d:l.t=="udl"?"area of rectangle = w·ℓ, acts at its middle":"area of trapezoid; acts at its centroid"})}});
+ const r=st.sup.filter(s=>s.t!="hinge").reduce((a,s)=>a+(s.t=="fixed"?2:1),0),hn=st.sup.filter(s=>s.t=="hinge").length,deg=r-2-hn,S_=[];
+ S_.push(["Understand the problem","#2563eb",`<p>Imagine you are the designer. We have a beam of length <b class="r">${L_(st.L)} ${Lu}</b> with Young's modulus <b class="r">E = ${nd(st.E*fac("E"),1)} ${uk("E")}</b>. Its stiffness <i>EI</i> ${st.Iseg.length?"<b>changes along the member</b>, because the second moment of area I is different in different parts:":"is constant, with <b class='r'>I = "+nd(st.I*fac("I"),1)+" "+uk("I")+"</b>."}</p>`+(st.Iseg.length?`<ul>${st.Iseg.map(g=>`<li>from ${L_(g.x1)} to ${L_(g.x2)} ${Lu}: I = ${nd(g.I*fac("I"),0)} ${uk("I")}</li>`).join("")}<li>elsewhere: I = ${nd(st.I*fac("I"),0)} ${uk("I")}</li></ul><div class="tip">💡 Deeper parts attract more moment but also resist it better. In the figure the member depth is drawn in proportion to I<sup>1/3</sup> and dimensioned.</div>`:"")+`<img src="${$("c0").toDataURL()}">`]);
+ S_.push(["Replace distributed loads by equivalent point loads","#7c3aed",`<p>For equilibrium we may replace each distributed load by its <b>resultant</b> W (the area of the load diagram) acting at the <b>centroid</b> of that diagram.</p>`+`<table><tr><th>Load</th><th>W (${Fu})</th><th>Acts at x (${Lu})</th><th>Rule</th></tr>${loads.map(l=>`<tr><td>${l.n}</td><td>${l.mc?"couple "+M_(l.mc)+" "+Mu:F_(l.W)}</td><td>${L_(l.xb)}</td><td style="text-align:left">${l.d}</td></tr>`).join("")}</table>`+mt(sb(mi("W"),"")+mo("=")+fr(sb(mi("w"),mn(1))+mo("+")+sb(mi("w"),mn(2)),mn(2))+mo("·")+mi("ℓ"))]);
+ let eq=`<p>Unknown reaction components: <b class="r">r = ${r}</b>. Statics gives 3 equations, ${hn} internal hinge${hn==1?"":"s"} give ${hn} more, but only 2 are usable for vertical loads on a straight beam (ΣF<sub>y</sub> = 0, ΣM = 0).</p>`+mt(mi("r")+mo("−")+mn(2)+mo("−")+mi("h")+mo("=")+mn(r)+mo("−")+mn(2)+mo("−")+mn(hn)+mo("=")+mn(deg))+`<p>${deg<=0?"✅ The beam is <b>statically determinate</b>: equilibrium alone gives all reactions.":"⚠️ The beam is <b>statically indeterminate to degree "+deg+"</b>: equilibrium is not enough. We add compatibility (deflection) conditions, i.e. the stiffness method with EI(x) varying element by element. Results below come from that solution; they are then checked against ΣF<sub>y</sub> = 0."}</p>`;
+ const sp=rx.filter(s=>s.t!="fixed");
+ if(deg==0&&rx.length==2&&rx.every(s=>s.t!="fixed")&&!st.sup.some(s=>s.t=="hinge")){const A=rx[0],B=rx[1],l=B.x-A.x,sm=loads.reduce((a,q)=>a+q.W*(q.xb-A.x)+(q.mc||0),0),RB=sm/l;
+  eq+=`<p>Take moments about support <b>A</b> (x = ${L_(A.x)} ${Lu}); clockwise positive. Reaction R<sub>A</sub> has no moment arm and drops out:</p>`+mt(mo("Σ")+sb(mi("M"),mi("A"))+mo("=")+mn(0)+mo("⇒")+sb(mi("R"),mi("B"))+mo("·")+mn(L_(l))+mo("=")+mo("Σ")+mo("(")+mi("W")+mo("·")+mi("d")+mo(")")+mo("+")+mo("Σ")+mi("M"))+mt(sb(mi("R"),mi("B"))+mo("=")+fr(mn(M_(sm)),mn(L_(l)))+mo("=")+mn(F_(RB))+mx(Fu))+`<p>Then vertical equilibrium:</p>`+mt(sb(mi("R"),mi("A"))+mo("=")+mo("Σ")+mi("W")+mo("−")+sb(mi("R"),mi("B"))+mo("=")+mn(F_(R.Ptot))+mo("−")+mn(F_(RB))+mo("=")+mn(F_(R.Ptot-RB))+mx(Fu))}
+ eq+=`<table><tr><th>Support</th><th>x (${Lu})</th><th>R<sub>y</sub> (${Fu})</th><th>M (${Mu})</th></tr>${rx.map(q=>`<tr><td>${q.t}</td><td>${L_(q.x)}</td><td><b class="r">${F_(q.Ry)}</b></td><td>${q.t=="fixed"?M_(q.M):"–"}</td></tr>`).join("")}</table>`+mt(mo("Σ")+sb(mi("F"),mi("y"))+mo("=")+mn(F_(R.sRy))+mo("−")+mn(F_(R.Ptot))+mo("=")+mn(nd((R.sRy-R.Ptot)*fac("F"),3))+mo("✓"));
+ S_.push(["Find the support reactions","#db2777",eq+`<img src="${$("c4").toDataURL()}"><div class="tip">💡 Always check ΣF<sub>y</sub> = 0 at the end. It takes ten seconds and catches most arithmetic slips.</div>`]);
+ const ks=[...new Set([0,st.L,...st.sup.map(s=>s.x),...st.lds.flatMap(l=>l.t=="udl"||l.t=="tri"?[l.x1,l.x2]:[l.x1])].map(v=>+v.toFixed(5)))].sort((a,b)=>a-b);
+ const row=k=>{const e=R.pts.filter(p=>Math.abs(p.x-k)<1e-5);if(!e.length)return"";const a=e[0],b=e[e.length-1];return`<tr><td>${L_(k)}</td><td>${F_(a.V)}${Math.abs(a.V-b.V)>1e-6?" → "+F_(b.V):""}</td><td>${M_(a.M)}${Math.abs(a.M-b.M)>1e-6?" → "+M_(b.M):""}</td></tr>`};
+ S_.push(["Shear force at the key sections","#ea580c",`<p>Cut the beam at x and look at the part on the left. The <b>shear force</b> is the sum of vertical forces to the left (upward positive), and the <b>bending moment</b> the sum of their moments about the cut (sagging positive).</p>`+mt(mi("V")+mo("(")+mi("x")+mo(")")+mo("=")+mo("Σ")+sb(mi("R"),mi("y"))+mo("−")+mo("Σ")+mi("P")+mo("−")+mo("∫")+mi("w")+mx("dx"))+mt(mi("M")+mo("(")+mi("x")+mo(")")+mo("=")+mo("Σ")+mo("[")+sb(mi("R"),mi("y"))+mo("·")+mo("(")+mi("x")+mo("−")+sb(mi("x"),mi("i"))+mo(")")+mo("]")+mo("−")+mo("Σ")+mo("[")+mi("P")+mo("·")+mi("arm")+mo("]"))+`<table><tr><th>x (${Lu})</th><th>V (${Fu})</th><th>M (${Mu})</th></tr>${ks.map(row).join("")}</table><p>An arrow “a → b” means a sudden jump: a point load or support changes V, a couple changes M.</p>`+`<img src="${$("c1").toDataURL()}"><div class="tip">💡 Slope of the shear diagram = −w (load intensity). Shear changes sign where the moment is at an extreme.</div>`]);
+ S_.push(["Bending moment and where it peaks","#16a34a",mt(mi("V")+mo("=")+mn(0)+mx("⇒")+mx("dM/dx")+mo("=")+mn(0)+mx("⇒")+mx("maximum moment"))+`<p>Largest sagging moment: <b class="r">${M_(R.Mp.M)} ${Mu}</b> at x = ${L_(R.Mp.x)} ${Lu}. Largest hogging moment: <b class="r">${M_(R.Mn.M)} ${Mu}</b> at x = ${L_(R.Mn.x)} ${Lu}.</p><img src="${$("c2").toDataURL()}">`+`<p>Bending stress with section modulus Z = ${nd(st.Z*fac("Z"),1)} ${uk("Z")}:</p>`+mt(mi("σ")+mo("=")+fr(sb(mi("M"),mn("max")),mi("Z"))+mo("=")+mn(nd(R.sigma*fac("S"),1))+mx(uk("S")))+`<p>Yield strength ${nd(st.fy*fac("S"),0)} ${uk("S")} → <b class="${R.sigma<=st.fy?"pass":"fail"}">${R.sigma<=st.fy?"OK ✓":"EXCEEDED ✗"}</b>${st.Iseg.length?". With variable I, remember to repeat this check where Z is smallest as well as where M is largest.":""}</p>`]);
+ S_.push(["Deflection with EI(x)","#0891b2",`<p>The elastic curve satisfies the differential equation below; integrate twice and use the boundary conditions at supports${st.Iseg.length?" plus <b>continuity of slope and deflection</b> where I changes":""}.</p>`+mt(mi("E")+mo("·")+mi("I")+mo("(")+mi("x")+mo(")")+fr(sq(mi("d"),mn(2))+mi("y"),mi("dx")+"<mn></mn>"+mo("")).replace("<mn></mn>","")+mo("=")+mi("M")+mo("(")+mi("x")+mo(")"))+mt(mi("θ")+mo("=")+fr(mn(1),mi("E"))+mo("∫")+fr(mi("M"),mi("I")+mo("(")+mi("x")+mo(")"))+mx("dx")+mo("+")+sb(mi("C"),mn(1)))+`<p>${st.Iseg.length?"Because I jumps between sections, the integral is split into pieces; the program does this with Euler–Bernoulli beam elements whose EI follows your table.":"EI is constant so the classic closed-form integrals apply."}</p><img src="${$("c3").toDataURL()}"><p>Maximum deflection <b class="r">${nd(Math.abs(R.Ym.y)*fac("D"),2)} ${uk("D")}</b> at x = ${L_(R.Ym.x)} ${Lu}; limit L/${st.lim} = ${nd(R.allow*fac("D"),2)} ${uk("D")} → <b class="${Math.abs(R.Ym.y)<=R.allow?"pass":"fail"}">${Math.abs(R.Ym.y)<=R.allow?"OK ✓":"TOO FLEXIBLE ✗"}</b></p>`]);
+ S_.push(["Summary","#ca8a04",`<div class="k"><div><span>Max shear</span><b>${F_(R.Vm.V)} ${Fu}</b></div><div><span>Max sagging M</span><b>${M_(R.Mp.M)} ${Mu}</b></div><div><span>Max hogging M</span><b>${M_(R.Mn.M)} ${Mu}</b></div><div><span>Max deflection</span><b>${nd(Math.abs(R.Ym.y)*fac("D"),2)} ${uk("D")}</b></div></div><div class="tip">🎓 Study tip: redo the reactions by hand, then compare with the table in step 3. Change a value in “Variable I” and watch how the moment diagram of an indeterminate beam shifts toward the stiffer part.</div>`]);
+ h=S_.map((s,i)=>`<div class="st" style="--c:${s[1]}"><h3><span>${i+1}</span>${s[0]}</h3>${s[2]}</div>`).join("");
+ let d=$("tut");if(!d){d=document.createElement("div");d.id="tut";document.body.append(d)}
+ d.hidden=false;d.innerHTML=`<div class="w"><div class="bar nop"><button id="tX" class="p">✕ Close</button><button onclick="print()">Print</button></div><h1>Step-by-step solution — ${esc($("pre").selectedOptions[0]?.textContent||"Beam")}</h1>${h}</div>`;
+ $("tX").onclick=()=>d.hidden=true}
+$("bTut").onclick=tutor;
+isegUI();run();
+</script>
   </body>
 </html>
